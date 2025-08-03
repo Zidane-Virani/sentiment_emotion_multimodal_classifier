@@ -6,7 +6,7 @@ from meld_dataset import MELDDataset
 from sklearn.metrics import accuracy_score, precision_score
 from torch.utils.tensorboard import SummaryWriter
 import os
-import datetime
+from datetime import datetime
 
 class TextEncoder(nn.Module):
     def __init__(self):
@@ -129,9 +129,7 @@ class MultiModalSentimentModel(nn.Module):
         return {
             "emotion_output": emotion_output,
             "sentiment_output": sentiment_output
-        }
-    
-    
+        }  
     
 class MultiModalTrainer: 
     def __init__(self, model, train_loader, val_loader):
@@ -160,17 +158,17 @@ class MultiModalTrainer:
         
         #Loss Function
         self.optimizer = torch.optim.Adam([
-            {"params": self.text_encoder.parameters(), "lr": 8e-6},
-            {"params": self.video_encoder.parameters(), "lr": 8e-5},
-            {"params": self.audio_encoder.parameters(), "lr": 8e-5},
-            {"params": self.fusion_layer.parameters(), "lr": 5e-4},
-            {"params": self.emotion_classifier.parameters(), "lr": 5e-5},
-            {"params": self.sentiment_classifier.parameters(), "lr": 8e-6},
-        ], weight_decay = 1e^-5)
+            {"params": self.model.text_encoder.parameters(), "lr": 8e-6},
+            {"params": self.model.video_encoder.parameters(), "lr": 8e-5},
+            {"params": self.model.audio_encoder.parameters(), "lr": 8e-5},
+            {"params": self.model.fusion_layer.parameters(), "lr": 5e-4},
+            {"params": self.model.emotion_classifier.parameters(), "lr": 5e-5},
+            {"params": self.model.sentiment_classifier.parameters(), "lr": 8e-6},
+        ], weight_decay = 1e-5)
         
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimzer,
-            model="min",
+            self.optimizer,
+            mode="min",
             factor = 0.1,
             patience = 2
         )
@@ -185,7 +183,7 @@ class MultiModalTrainer:
             label_smoothing = 0.05
         )
         
-    def log_metrics(self, losses, metrics, phase="train"):
+    def log_metrics(self, losses, metrics=None, phase="train"):
         if phase == "train":
             self.current_train_losses = losses
         else:
@@ -193,20 +191,20 @@ class MultiModalTrainer:
                 "loss/total/train", self.current_train_losses['total'], self.global_step
             )
             self.writer.add_scalar(
-                "loss/total/val", self.current_val_losses["total"], self.global_step
+                "loss/total/val", losses["total"], self.global_step
             )
             
             self.writer.add_scalar(
                 "loss/emotion/train", self.current_train_losses["emotion"], self.global_step
             )
             self.writer.add_scalar(
-                "loss/emotion/val", self.current_val_losses["emotion"], self.global_step
+                "loss/emotion/val", losses["emotion"], self.global_step
             )
             self.writer.add_scalar(
                 "loss/sentiment/train", self.current_train_losses["sentiment"], self.global_step
             )
             self.writer.add_scalar(
-                "loss/sentiment/val", self.current_val_losses["sentiment"], self.global_step
+                "loss/sentiment/val", losses["sentiment"], self.global_step
             )
             
         if metrics:
@@ -266,9 +264,11 @@ class MultiModalTrainer:
             running_loss["sentiment"] += sentiment_loss.item()
             
             self.log_metrics(
-                "total": total_loss.item(),
-                "emotion": emotion_loss.item(),
-                "sentiment": sentiment_loss.item()
+                losses = {
+                    "total": total_loss.item(),
+                    "emotion": emotion_loss.item(),
+                    "sentiment": sentiment_loss.item()
+                }
             )
             
             self.global_step +=1 
@@ -344,7 +344,8 @@ class MultiModalTrainer:
         )
         
         self.log_metrics(
-            {"emotion_preicison": emotion_precision,
+            avg_loss,
+            {"emotion_precision": emotion_precision,
             "emotion_accuracy": emotion_accuracy,
             "sentiment_precision": sentiment_precision,
             "sentiment_accuracy": sentiment_accuracy},
